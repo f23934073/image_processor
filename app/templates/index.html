@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片处理工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            100: '#1a1a1a',
+                            200: '#2d2d2d',
+                            300: '#404040',
+                            400: '#525252',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.31"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #e5e5e5;
+        }
+        .upload-area {
+            border: 2px dashed #404040;
+            background-color: #1a1a1a;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #6366f1;
+            background-color: #2d2d2d;
+        }
+        .custom-input {
+            background-color: #2d2d2d;
+            border: 1px solid #404040;
+            color: #e5e5e5;
+        }
+        .custom-input:focus {
+            border-color: #6366f1;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+        .btn-primary {
+            background-color: #6366f1;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-color: #4f46e5;
+        }
+        .card {
+            background-color: #1a1a1a;
+            border: 1px solid #404040;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body class="min-h-screen py-8 px-4">
+    {% raw %}
+    <div id="app" class="container mx-auto max-w-4xl">
+        <h1 class="text-4xl font-bold mb-12 text-center text-indigo-400">图片处理工具</h1>
+        
+        <!-- 功能选择 -->
+        <div class="mb-10">
+            <div class="flex justify-center space-x-4">
+                <button v-for="tool in ['crop', 'watermark', 'stitch']"
+                        :key="tool"
+                        @click="currentTool = tool"
+                        :class="['px-6 py-3 rounded-lg transition-all duration-300',
+                                currentTool === tool 
+                                    ? 'bg-indigo-600 text-white shadow-lg' 
+                                    : 'bg-dark-200 text-gray-300 hover:bg-dark-300']">
+                    {{ toolNames[tool] }}
+                </button>
+            </div>
+        </div>
+
+        <!-- 上传区域 -->
+        <div class="card rounded-xl p-6 mb-8">
+            <div class="upload-area rounded-lg p-8 text-center cursor-pointer">
+                <input type="file" 
+                       @change="handleFileUpload" 
+                       :multiple="currentTool === 'stitch'"
+                       accept="image/*"
+                       class="hidden"
+                       ref="fileInput">
+                <div class="text-gray-400" @click="$refs.fileInput.click()">
+                    <svg class="mx-auto h-16 w-16 mb-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <p class="text-lg mb-2">点击或拖拽图片到此处</p>
+                    <p class="text-sm text-gray-500">支持 JPG, PNG, GIF 格式</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 裁剪设置 -->
+        <div v-if="currentTool === 'crop' && previewUrl" class="card rounded-xl p-6 mb-8">
+            <h3 class="text-xl font-semibold mb-6 text-indigo-400">裁剪设置</h3>
+            <div class="grid grid-cols-2 gap-6">
+                <div v-for="(label, key) in cropLabels" :key="key">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">{{ label }}</label>
+                    <input type="number" 
+                           v-model="cropSettings[key]"
+                           class="custom-input w-full px-4 py-2 rounded-lg">
+                </div>
+            </div>
+        </div>
+
+        <!-- 预览 -->
+        <div v-if="previewUrl" class="card rounded-xl p-6 mb-8">
+            <h3 class="text-xl font-semibold mb-6 text-indigo-400">预览</h3>
+            <img :src="previewUrl" class="w-full rounded-lg">
+        </div>
+
+        <!-- 处理按钮 -->
+        <div v-if="previewUrl" class="text-center mb-8">
+            <button @click="processImage"
+                    :disabled="processing"
+                    class="btn-primary px-8 py-3 rounded-lg text-lg font-medium disabled:opacity-50">
+                <template v-if="!processing">
+                    开始处理
+                </template>
+                <template v-else>
+                    <svg class="animate-spin inline-block h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    处理中...
+                </template>
+            </button>
+        </div>
+
+        <!-- 结果 -->
+        <div v-if="resultUrl" class="card rounded-xl p-6">
+            <h3 class="text-xl font-semibold mb-6 text-indigo-400">处理结果</h3>
+            <img :src="resultUrl" class="w-full rounded-lg mb-6">
+            <div class="text-center">
+                <a :href="resultUrl"
+                   download
+                   class="inline-flex items-center px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-300">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                    下载图片
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endraw %}
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    currentTool: 'crop',
+                    selectedFiles: null,
+                    previewUrl: null,
+                    resultUrl: null,
+                    processing: false,
+                    toolNames: {
+                        crop: '裁剪',
+                        watermark: '去水印',
+                        stitch: '拼接'
+                    },
+                    cropLabels: {
+                        x: 'X 坐标',
+                        y: 'Y 坐标',
+                        width: '宽度',
+                        height: '高度'
+                    },
+                    cropSettings: {
+                        x: 0,
+                        y: 0,
+                        width: 100,
+                        height: 100
+                    }
+                }
+            },
+            methods: {
+                handleFileUpload(event) {
+                    this.selectedFiles = event.target.files
+                    if (this.selectedFiles.length > 0) {
+                        this.previewUrl = URL.createObjectURL(this.selectedFiles[0])
+                        this.resultUrl = null
+                    }
+                },
+                async processImage() {
+                    if (!this.selectedFiles) return
+                    
+                    this.processing = true
+                    const formData = new FormData()
+                    
+                    try {
+                        if (this.currentTool === 'stitch') {
+                            Array.from(this.selectedFiles).forEach(file => {
+                                formData.append('files', file)
+                            })
+                        } else {
+                            formData.append('file', this.selectedFiles[0])
+                        }
+
+                        let endpoint = ''
+                        if (this.currentTool === 'crop') {
+                            endpoint = '/crop'
+                            Object.keys(this.cropSettings).forEach(key => {
+                                formData.append(key, this.cropSettings[key])
+                            })
+                        } else if (this.currentTool === 'watermark') {
+                            endpoint = '/remove-watermark'
+                        } else if (this.currentTool === 'stitch') {
+                            endpoint = '/stitch'
+                        }
+
+                        const response = await axios.post(endpoint, formData, {
+                            headers: {
+                                'Content-Type': 'multipart/form-data'
+                            }
+                        })
+                        this.resultUrl = `/static/uploads/${response.data.filename}`
+                    } catch (error) {
+                        console.error('Error processing image:', error)
+                        alert('处理图片时出错，请重试')
+                    } finally {
+                        this.processing = false
+                    }
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
