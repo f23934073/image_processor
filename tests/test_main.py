@@ -111,52 +111,55 @@ async def test_stitch_images(client, test_images_for_stitch):
             f.close()
 
 @pytest.mark.asyncio
-async def test_rotate_image(client, test_image):
+async def test_rotate_image(client, test_image_path):
     # 准备测试数据
-    files = {"file": test_image}
-    data = {
-        "angle": 90.0,
-        "bg_color": "#FFFFFF"
-    }
-    
-    # 发送请求
-    response = await client.post("/rotate", files=files, data=data)
-    
-    # 验证响应
-    assert response.status_code == 200
-    assert "filename" in response.json()
-    assert response.json()["filename"].startswith("rotated_")
+    with open(test_image_path, "rb") as f:
+        files = {"file": ("test_image.png", f, "image/png")}
+        data = {
+            "angle": 90.0,
+            "bg_color": "#FFFFFF"
+        }
+        
+        # 发送请求
+        response = await client.post("/rotate", files=files, data=data)
+        
+        # 验证响应
+        assert response.status_code == 200
+        assert "filename" in response.json()
+        assert response.json()["filename"].startswith("rotated_")
 
 @pytest.mark.asyncio
-async def test_rotate_image_invalid_angle(client, test_image):
+async def test_rotate_image_invalid_angle(client, test_image_path):
     # 准备测试数据
-    files = {"file": test_image}
-    data = {
-        "angle": 400.0,  # 无效角度
-        "bg_color": "#FFFFFF"
-    }
-    
-    # 发送请求
-    response = await client.post("/rotate", files=files, data=data)
-    
-    # 验证响应
-    assert response.status_code == 200  # 应该仍然工作，因为我们会处理任何角度
-    assert "filename" in response.json()
+    with open(test_image_path, "rb") as f:
+        files = {"file": ("test_image.png", f, "image/png")}
+        data = {
+            "angle": 400.0,  # 无效角度
+            "bg_color": "#FFFFFF"
+        }
+        
+        # 发送请求
+        response = await client.post("/rotate", files=files, data=data)
+        
+        # 验证响应
+        assert response.status_code == 200  # 应该仍然工作，因为我们会处理任何角度
+        assert "filename" in response.json()
 
 @pytest.mark.asyncio
-async def test_rotate_image_invalid_color(client, test_image):
+async def test_rotate_image_invalid_color(client, test_image_path):
     # 准备测试数据
-    files = {"file": test_image}
-    data = {
-        "angle": 90.0,
-        "bg_color": "invalid_color"  # 无效颜色
-    }
-    
-    # 发送请求
-    response = await client.post("/rotate", files=files, data=data)
-    
-    # 验证响应
-    assert response.status_code == 500  # 应该返回错误
+    with open(test_image_path, "rb") as f:
+        files = {"file": ("test_image.png", f, "image/png")}
+        data = {
+            "angle": 90.0,
+            "bg_color": "invalid_color"  # 无效颜色
+        }
+        
+        # 发送请求
+        response = await client.post("/rotate", files=files, data=data)
+        
+        # 验证响应
+        assert response.status_code == 500  # 应该返回错误
 
 @pytest.mark.asyncio
 async def test_invalid_crop_parameters(client, test_image_path):
