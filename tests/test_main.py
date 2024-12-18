@@ -111,6 +111,64 @@ async def test_stitch_images(client, test_images_for_stitch):
             f.close()
 
 @pytest.mark.asyncio
+async def test_rotate_image(client, test_image_path):
+    # 准备测试数据
+    with open(test_image_path, "rb") as f:
+        content = f.read()
+        
+    files = {"file": ("test_image.png", content, "image/png")}
+    data = {
+        "angle": "90.0",  # 作为字符串发送
+        "bg_color": "#FFFFFF"
+    }
+    
+    # 发送请求
+    response = client.post("/rotate", files=files, data=data)
+    assert response.status_code == 200
+    
+    response_data = response.json()
+    assert "filename" in response_data
+    assert response_data["filename"].startswith("rotated_")
+
+@pytest.mark.asyncio
+async def test_rotate_image_invalid_angle(client, test_image_path):
+    # 准备测试数据
+    with open(test_image_path, "rb") as f:
+        content = f.read()
+        
+    files = {"file": ("test_image.png", content, "image/png")}
+    data = {
+        "angle": "invalid",  # 无效角度
+        "bg_color": "#FFFFFF"
+    }
+    
+    # 发送请求
+    response = client.post("/rotate", files=files, data=data)
+    assert response.status_code == 400  # 应该返回 400 Bad Request
+    
+    response_data = response.json()
+    assert "Invalid angle format" in response_data["detail"]
+
+@pytest.mark.asyncio
+async def test_rotate_image_invalid_color(client, test_image_path):
+    # 准备测试数据
+    with open(test_image_path, "rb") as f:
+        content = f.read()
+        
+    files = {"file": ("test_image.png", content, "image/png")}
+    data = {
+        "angle": "90.0",
+        "bg_color": "invalid"  # 无效颜色
+    }
+    
+    # 发送请求
+    response = client.post("/rotate", files=files, data=data)
+    assert response.status_code == 400  # 应该返回 400 Bad Request
+    
+    response_data = response.json()
+    assert "Invalid background color format" in response_data["detail"]
+
+@pytest.mark.asyncio
 async def test_invalid_crop_parameters(client, test_image_path):
     """Test cropping with invalid parameters"""
     create_test_image(test_image_path)

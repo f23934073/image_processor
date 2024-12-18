@@ -71,7 +71,7 @@
         <!-- 功能选择 -->
         <div class="mb-10">
             <div class="flex justify-center space-x-4">
-                <button v-for="tool in ['crop', 'watermark', 'stitch']"
+                <button v-for="tool in ['crop', 'watermark', 'stitch', 'rotate']"
                         :key="tool"
                         @click="currentTool = tool"
                         :class="['px-6 py-3 rounded-lg transition-all duration-300',
@@ -102,9 +102,47 @@
             </div>
         </div>
 
+        <!-- 图片旋转 -->
+        <div v-if="currentTool === 'rotate' && previewUrl" class="card rounded-xl p-6 mb-8">
+            <h3 class="text-xl font-bold mb-6 text-indigo-400">图片旋转</h3>
+            <form id="rotateForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">旋转角度</label>
+                    <div class="flex items-center space-x-4">
+                        <input type="range" name="angle" min="-180" max="180" value="0" 
+                               class="w-full" id="rotateSlider" v-model="rotateAngle">
+                        <input type="number" name="angleNumber" min="-180" max="180" value="0" 
+                               class="w-20 px-2 py-1 border rounded" id="rotateNumber" v-model="rotateAngle">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">背景颜色</label>
+                    <input type="color" name="bg_color" value="#FFFFFF" 
+                           class="mt-1 block" v-model="rotateBgColor">
+                </div>
+                <button @click="rotateImage"
+                        :disabled="processing"
+                        class="btn-primary px-8 py-3 rounded-lg text-lg font-medium disabled:opacity-50">
+                    <template v-if="!processing">
+                        旋转图片
+                    </template>
+                    <template v-else>
+                        <svg class="animate-spin inline-block h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        处理中...
+                    </template>
+                </button>
+            </form>
+            <div id="rotatePreview" class="mt-4">
+                <img :src="previewUrl" class="max-w-full">
+            </div>
+        </div>
+
         <!-- 裁剪设置 -->
         <div v-if="currentTool === 'crop' && previewUrl" class="card rounded-xl p-6 mb-8">
-            <h3 class="text-xl font-semibold mb-6 text-indigo-400">裁剪设置</h3>
+            <h3 class="text-xl font-bold mb-6 text-indigo-400">裁剪设置</h3>
             <div class="grid grid-cols-2 gap-6">
                 <div v-for="(label, key) in cropLabels" :key="key">
                     <label class="block text-sm font-medium text-gray-300 mb-2">{{ label }}</label>
@@ -116,13 +154,13 @@
         </div>
 
         <!-- 预览 -->
-        <div v-if="previewUrl" class="card rounded-xl p-6 mb-8">
-            <h3 class="text-xl font-semibold mb-6 text-indigo-400">预览</h3>
+        <div v-if="previewUrl && currentTool !== 'rotate'" class="card rounded-xl p-6 mb-8">
+            <h3 class="text-xl font-bold mb-6 text-indigo-400">预览</h3>
             <img :src="previewUrl" class="w-full rounded-lg">
         </div>
 
         <!-- 处理按钮 -->
-        <div v-if="previewUrl" class="text-center mb-8">
+        <div v-if="previewUrl && currentTool !== 'rotate'" class="text-center mb-8">
             <button @click="processImage"
                     :disabled="processing"
                     class="btn-primary px-8 py-3 rounded-lg text-lg font-medium disabled:opacity-50">
@@ -141,7 +179,7 @@
 
         <!-- 结果 -->
         <div v-if="resultUrl" class="card rounded-xl p-6">
-            <h3 class="text-xl font-semibold mb-6 text-indigo-400">处理结果</h3>
+            <h3 class="text-xl font-bold mb-6 text-indigo-400">处理结果</h3>
             <img :src="resultUrl" class="w-full rounded-lg mb-6">
             <div class="text-center">
                 <a :href="resultUrl"
@@ -171,7 +209,8 @@
                     toolNames: {
                         crop: '裁剪',
                         watermark: '去水印',
-                        stitch: '拼接'
+                        stitch: '拼接',
+                        rotate: '旋转'
                     },
                     cropLabels: {
                         x: 'X 坐标',
@@ -184,7 +223,9 @@
                         y: 0,
                         width: 100,
                         height: 100
-                    }
+                    },
+                    rotateAngle: 0,
+                    rotateBgColor: '#FFFFFF'
                 }
             },
             methods: {
@@ -220,9 +261,37 @@
                             endpoint = '/remove-watermark'
                         } else if (this.currentTool === 'stitch') {
                             endpoint = '/stitch'
+                        } else if (this.currentTool === 'rotate') {
+                            endpoint = '/rotate'
+                            formData.append('angle', this.rotateAngle)
+                            formData.append('bg_color', this.rotateBgColor)
                         }
 
                         const response = await axios.post(endpoint, formData, {
+                            headers: {
+                                'Content-Type': 'multipart/form-data'
+                            }
+                        })
+                        this.resultUrl = `/static/uploads/${response.data.filename}`
+                    } catch (error) {
+                        console.error('Error processing image:', error)
+                        alert('处理图片时出错，请重试')
+                    } finally {
+                        this.processing = false
+                    }
+                },
+                async rotateImage() {
+                    if (!this.selectedFiles) return
+                    
+                    this.processing = true
+                    const formData = new FormData()
+                    
+                    try {
+                        formData.append('file', this.selectedFiles[0])
+                        formData.append('angle', this.rotateAngle)
+                        formData.append('bg_color', this.rotateBgColor)
+
+                        const response = await axios.post('/rotate', formData, {
                             headers: {
                                 'Content-Type': 'multipart/form-data'
                             }
