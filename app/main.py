@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -157,6 +157,84 @@ async def remove_watermark(file: UploadFile = File(...)):
         
     except Exception as e:
         print(f"Error in remove_watermark: {str(e)}")  # 添加日志
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/rotate")
+async def rotate_image(
+    file: UploadFile = File(...),
+    angle: float = Form(...),
+    bg_color: str = Form("#FFFFFF")
+):
+    try:
+        # 确保上传目录存在
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # 读取图片
+        content = await file.read()
+        image = Image.open(io.BytesIO(content))
+        img_array = np.array(image)
+        
+        # 转换颜色格式
+        if len(img_array.shape) == 3:
+            img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+        else:
+            img_bgr = cv2.cvtColor(img_array, cv2.COLOR_GRAY2BGR)
+            
+        # 解析背景颜色
+        bg_color = bg_color.lstrip('#')
+        bg_color = tuple(int(bg_color[i:i+2], 16) for i in (0, 2, 4))  # RGB
+        bg_color = bg_color[::-1]  # BGR for OpenCV
+        
+        # 获取图像尺寸
+        height, width = img_bgr.shape[:2]
+        center = (width/2, height/2)
+        
+        # 计算旋转后的图像大小
+        angle_rad = abs(angle * np.pi / 180)
+        new_width = int(width * abs(np.cos(angle_rad)) + height * abs(np.sin(angle_rad)))
+        new_height = int(width * abs(np.sin(angle_rad)) + height * abs(np.cos(angle_rad)))
+        
+        # 获取旋转矩阵
+        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+        
+        # 调整旋转矩阵以适应新尺寸
+        rotation_matrix[0, 2] += new_width/2 - width/2
+        rotation_matrix[1, 2] += new_height/2 - height/2
+        
+        # 执行旋转
+        rotated_img = cv2.warpAffine(
+            img_bgr,
+            rotation_matrix,
+            (new_width, new_height),
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=bg_color
+        )
+        
+        # 转回RGB
+        rotated_rgb = cv2.cvtColor(rotated_img, cv2.COLOR_BGR2RGB)
+        
+        # 转为PIL图像
+        processed_image = Image.fromarray(rotated_rgb)
+        
+        # 保存处理后的图片
+        filename = f"rotated_{file.filename}"
+        filepath = UPLOAD_DIR / filename
+        
+        # 确保文件扩展名正确
+        if not filepath.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+            filepath = filepath.with_suffix('.png')
+        
+        # 保存图片
+        processed_image.save(str(filepath), quality=95)
+        
+        # 验证文件是否成功保存
+        if not filepath.exists():
+            raise HTTPException(status_code=500, detail="Failed to save processed image")
+        
+        return {"filename": filepath.name}
+        
+    except Exception as e:
+        print(f"Error in rotate_image: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/stitch")
