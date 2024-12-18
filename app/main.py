@@ -162,7 +162,7 @@ async def remove_watermark(file: UploadFile = File(...)):
 @app.post("/rotate")
 async def rotate_image(
     file: UploadFile = File(...),
-    angle: float = Form(...),
+    angle: str = Form(...),
     bg_color: str = Form("#FFFFFF")
 ):
     try:
@@ -180,10 +180,21 @@ async def rotate_image(
         else:
             img_bgr = cv2.cvtColor(img_array, cv2.COLOR_GRAY2BGR)
             
-        # 解析背景颜色
-        bg_color = bg_color.lstrip('#')
-        bg_color = tuple(int(bg_color[i:i+2], 16) for i in (0, 2, 4))  # RGB
-        bg_color = bg_color[::-1]  # BGR for OpenCV
+        try:
+            # 解析背景颜色
+            if not bg_color.startswith('#'):
+                bg_color = '#' + bg_color
+            bg_color = bg_color.lstrip('#')
+            bg_color = tuple(int(bg_color[i:i+2], 16) for i in (0, 2, 4))  # RGB
+            bg_color = bg_color[::-1]  # BGR for OpenCV
+        except (ValueError, IndexError):
+            raise HTTPException(status_code=400, detail="Invalid background color format")
+            
+        try:
+            # 解析角度
+            angle = float(angle)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid angle format")
         
         # 获取图像尺寸
         height, width = img_bgr.shape[:2]
@@ -233,6 +244,8 @@ async def rotate_image(
         
         return {"filename": filepath.name}
         
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print(f"Error in rotate_image: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
